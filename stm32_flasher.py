@@ -180,6 +180,18 @@ class STM32Flasher(tk.Tk):
         self.resizable(True, True)
         self.minsize(420, 280)
 
+        # Set window icon (cross-platform)
+        try:
+            if getattr(sys, 'frozen', False):
+                base = sys._MEIPASS
+            else:
+                base = os.path.dirname(os.path.abspath(__file__))
+            icon_path = os.path.join(base, "icon.png")
+            if os.path.isfile(icon_path):
+                self.iconphoto(True, tk.PhotoImage(file=icon_path))
+        except Exception:
+            pass  # icon is optional, non-critical
+
         # State
         self.cli_path = tk.StringVar(value=cli_path or "")
         self.selected_sn = tk.StringVar(value="")

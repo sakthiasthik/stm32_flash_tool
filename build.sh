@@ -12,11 +12,18 @@ if ! command -v pyinstaller &>/dev/null; then
     pip install pyinstaller
 fi
 
+# Generate icon if not present
+if [ ! -f "icon.png" ]; then
+    echo "Run icon_gen.py first to generate icons."
+    exit 1
+fi
+
 echo "Building..."
 pyinstaller \
     --onefile \
     --windowed \
     --name "STM32-Flasher" \
+    --add-data "icon.png:." \
     --clean \
     stm32_flasher.py
 

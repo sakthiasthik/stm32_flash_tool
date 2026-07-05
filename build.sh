@@ -24,6 +24,7 @@ pyinstaller \
     --windowed \
     --name "STM32-Flasher" \
     --add-data "icon.png:." \
+    --collect-submodules tkinter \
     --clean \
     stm32_flasher.py
 

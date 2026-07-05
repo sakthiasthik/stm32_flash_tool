@@ -52,29 +52,48 @@ Lightweight, cross-platform GUI tool for flashing STM32 microcontrollers in mass
 
 ## Quick Start
 
-### Option A: Run the Python file
+### Option A: Download from GitHub Releases (no Python needed)
 
+1. Go to [Releases](https://github.com/sakthiasthik/stm32_flash_tool/releases)
+2. Download the latest:
+
+| File | Platform | Size |
+|------|----------|------|
+| `STM32-Flasher.exe` | Windows | ~13 MB |
+| `STM32-Flasher` | Linux | ~28 MB |
+
+**Windows:** Double-click `STM32-Flasher.exe`.
+
+**Linux:**
 ```bash
-python stm32_flasher.py
+chmod +x STM32-Flasher    # ⚠️ Required after download from web
+./STM32-Flasher
 ```
 
-Double-click also works on most systems.
+> **Why `chmod +x`?** Files downloaded from the web lose the execute permission on Linux. This is normal — every Linux binary from GitHub needs this.
 
-### Option B: Build a standalone executable
+### Option B: Run the Python file directly
+
+```bash
+python3 stm32_flasher.py
+```
+Requires Python 3.7+. On Linux, the app auto-installs `python3-tk` if missing.
+
+### Option C: Build from source
 
 **Windows:**
 ```cmd
 pip install pyinstaller
 build.bat
 ```
-Output: `dist\STM32-Flasher.exe` (~15 MB) — share this, no Python needed.
+Output: `dist\STM32-Flasher.exe`
 
 **Linux:**
 ```bash
 pip install pyinstaller
 bash build.sh
 ```
-Output: `dist/STM32-Flasher` (~15 MB) — share this, no Python needed.
+Output: `dist/STM32-Flasher`
 
 ## How It Works
 

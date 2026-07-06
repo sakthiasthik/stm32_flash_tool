@@ -161,6 +161,7 @@ import threading
 import json
 import re
 import queue
+import time
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 3: APPLICATION CLASS
@@ -203,6 +204,8 @@ class STM32Flasher(tk.Tk):
         self._queue = queue.Queue()
         self._worker_thread = None
         self._busy = False
+        self._flash_count = 0
+        self._flash_start = 0.0
 
         # Config
         self._load_config()
@@ -228,6 +231,7 @@ class STM32Flasher(tk.Tk):
             self.cli_path.set(data.get("cli_path", ""))
         addr = data.get("flash_address", self.FLASH_ADDRESS_DEFAULT)
         self.flash_address.set(addr)
+        self._flash_count = data.get("flash_count", 0)
 
     def _save_config(self):
         """Persist current settings to JSON config file."""
@@ -235,6 +239,7 @@ class STM32Flasher(tk.Tk):
             "cli_path": self.cli_path.get(),
             "flash_address": self.flash_address.get(),
             "last_dir": os.path.dirname(self.firmware_path.get()) if self.firmware_path.get() else "",
+            "flash_count": self._flash_count,
         }
         try:
             with open(CONFIG_FILE, "w") as f:
@@ -293,29 +298,40 @@ class STM32Flasher(tk.Tk):
         # Separator
         ttk.Separator(self).pack(fill="x", padx=12, pady=8)
 
-        # -- Flash + Verify button (big) --
-        self._btn_flash = ttk.Button(self, text="FLASH + VERIFY",
-                                     command=self.flash_and_verify)
+        # -- Flash + Verify button (big, green, prominent) --
+        self._btn_flash = tk.Button(self, text="⚡ FLASH + VERIFY",
+                                    command=self.flash_and_verify,
+                                    bg="#28a745", fg="white",
+                                    font=("", 13, "bold"),
+                                    activebackground="#218838",
+                                    activeforeground="white",
+                                    relief="raised", bd=3,
+                                    cursor="hand2", padx=20, pady=8)
         self._btn_flash.pack(pady=(8, 2))
-        # Make it bigger with a custom style
-        style = ttk.Style()
-        style.configure("Big.TButton", font=("", 12, "bold"))
-        self._btn_flash.configure(style="Big.TButton")
 
-        # -- Verify Only button (small) --
+        # -- Verify Only button (small, secondary) --
         self._btn_verify = ttk.Button(self, text="Verify Only",
                                       command=self.verify_only)
         self._btn_verify.pack(pady=2)
 
-        # -- Status --
+        # -- Board counter (small, top-right-ish) --
+        self._counter_label = tk.Label(self, text="", font=("", 8), fg="gray")
+        self._counter_label.pack(pady=(0, 2))
+        self._update_counter_label()
+
+        # -- Status (big, visible from across the room) --
         self._status_label = tk.Label(self, textvariable=self.status_text,
-                                      font=("", 14, "bold"), fg="black")
+                                      font=("", 18, "bold"), fg="black")
         self._status_label.pack(pady=(10, 4))
 
         # -- Progress output (hidden by default) --
         self._output_text = tk.Text(self, height=4, state="disabled",
                                     font=("Consolas", 9), bg="#f5f5f5")
         # Not packed by default — shown during operations
+
+        # -- Keyboard shortcuts --
+        self.bind("<Return>", lambda e: self._on_enter())
+        self.bind("<KP_Enter>", lambda e: self._on_enter())  # numpad enter
 
     def _update_cli_label(self):
         """Update the CLI path display."""
@@ -329,11 +345,44 @@ class STM32Flasher(tk.Tk):
 
     # ── Button State ──────────────────────────────────────────────────────
 
+    def _can_flash(self):
+        """Check if all inputs are valid for flashing."""
+        if self._busy:
+            return False
+        sn = self.selected_sn.get()
+        fp = self.firmware_path.get()
+        cli = self.cli_path.get()
+        return bool(sn and sn != "No board found" and fp
+                    and cli and os.path.isfile(cli))
+
+    def _on_enter(self):
+        """Enter key → trigger Flash+Verify if ready."""
+        if self._can_flash():
+            self.flash_and_verify()
+
+    def _update_button_state(self):
+        """Enable/disable Flash button based on input validity."""
+        if self._busy:
+            return
+        if self._can_flash():
+            self._btn_flash.configure(state="normal", bg="#28a745")
+        else:
+            self._btn_flash.configure(state="disabled", bg="#888888")
+
+    def _update_counter_label(self):
+        """Update the board counter display."""
+        if self._flash_count:
+            self._counter_label.configure(
+                text=f"Boards programmed: {self._flash_count}")
+        else:
+            self._counter_label.configure(text="")
+
     def _set_busy(self, busy):
         """Enable/disable controls during operations."""
         self._busy = busy
         state = "disabled" if busy else "normal"
-        self._btn_flash.configure(state=state)
+        bg = "#888888" if busy else "#28a745"
+        self._btn_flash.configure(state=state, bg=bg)
         self._btn_verify.configure(state=state)
         self._btn_refresh.configure(state=state)
         self._btn_browse.configure(state=state)
@@ -416,6 +465,7 @@ class STM32Flasher(tk.Tk):
             self._addr_entry.configure(state="normal")
         else:
             self._addr_entry.configure(state="disabled")
+        self._update_button_state()
 
     # ── Flash + Verify ────────────────────────────────────────────────────
 
@@ -496,6 +546,7 @@ class STM32Flasher(tk.Tk):
             return
 
         self._set_busy(True)
+        self._flash_start = time.time()
         self.status_text.set(f"{label} in progress...")
         self._status_label.configure(fg="black")
         self._show_output()
@@ -514,22 +565,26 @@ class STM32Flasher(tk.Tk):
                     self._queue.put(("log", line))
                 proc.wait(timeout=self.TIMEOUT_SECONDS)
 
+                elapsed = time.time() - self._flash_start
                 if proc.returncode == 0:
-                    self._queue.put(("done", mode, proc.returncode, ""))
+                    self._queue.put(("done", mode, proc.returncode, "", elapsed))
                 else:
                     self._queue.put(("done", mode, proc.returncode,
-                                     f"CLI exited with code {proc.returncode}"))
+                                     f"CLI exited with code {proc.returncode}", elapsed))
             except subprocess.TimeoutExpired:
                 try:
                     proc.kill()
                 except Exception:
                     pass
-                self._queue.put(("done", mode, -1, "Operation timed out."))
+                elapsed = time.time() - self._flash_start
+                self._queue.put(("done", mode, -1, "Operation timed out.", elapsed))
             except FileNotFoundError:
+                elapsed = time.time() - self._flash_start
                 self._queue.put(("done", mode, -1,
-                                 f"CLI not found: {self.cli_path.get()}"))
+                                 f"CLI not found: {self.cli_path.get()}", elapsed))
             except Exception as e:
-                self._queue.put(("done", mode, -1, str(e)))
+                elapsed = time.time() - self._flash_start
+                self._queue.put(("done", mode, -1, str(e), elapsed))
 
         self._worker_thread = threading.Thread(target=_worker, daemon=True)
         self._worker_thread.start()
@@ -544,6 +599,7 @@ class STM32Flasher(tk.Tk):
                 self._handle_message(msg)
         except queue.Empty:
             pass
+        self._update_button_state()
         self.after(100, self._poll_queue)
 
     def _handle_message(self, msg):
@@ -573,7 +629,7 @@ class STM32Flasher(tk.Tk):
             self._append_output(msg[1])
 
         elif kind == "done":
-            mode, rc, err = msg[1], msg[2], msg[3]
+            mode, rc, err, elapsed = msg[1], msg[2], msg[3], msg[4]
             self._set_busy(False)
 
             if mode == "flash_verify":
@@ -581,13 +637,35 @@ class STM32Flasher(tk.Tk):
             else:
                 verb = "verified"
 
+            time_str = f" in {elapsed:.1f}s" if elapsed else ""
+
             if rc == 0:
-                self.status_text.set(f"PASS — {verb} successfully")
+                # Get file size for context
+                try:
+                    fp = self.firmware_path.get()
+                    fsize = os.path.getsize(fp) if fp and os.path.exists(fp) else 0
+                    if fsize > 1024 * 1024:
+                        size_str = f" — {fsize/(1024*1024):.1f}MB"
+                    elif fsize > 1024:
+                        size_str = f" — {fsize/1024:.0f}KB"
+                    else:
+                        size_str = f" — {fsize}B"
+                except Exception:
+                    size_str = ""
+
+                self.status_text.set(f"✓ PASS{size_str}{time_str}")
                 self._status_label.configure(fg="green")
+                self.bell()
+                if mode == "flash_verify":
+                    self._flash_count += 1
+                    self._update_counter_label()
                 self._save_config()
             else:
-                self.status_text.set(f"FAIL — {err}")
+                self.status_text.set(f"✗ FAIL{time_str} — {err}")
                 self._status_label.configure(fg="red")
+                self.bell()
+                # Double beep for failure
+                self.after(200, self.bell)
 
             self._append_output(f"\n--- {self.status_text.get()} ---\n")
 

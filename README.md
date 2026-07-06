@@ -20,23 +20,7 @@ Lightweight, cross-platform GUI tool for flashing STM32 microcontrollers in mass
 
 ## Screenshot
 
-```
-┌──────────────────────────────────────┐
-│  STM32 Flash Tool                    │
-│                                      │
-│  CLI:  STM32_Programmer_CLI          │
-│  Board: [▼ ST-LINK SN: XXXX] [Refresh]│
-│  File:  [_______________] [Browse]   │
-│  Addr:  [0x08000000] (BIN only)      │
-│                                      │
-│  ┌────────────────────────────────┐  │
-│  │     FLASH + VERIFY             │  │
-│  └────────────────────────────────┘  │
-│  [Verify Only]                       │
-│                                      │
-│  ● PASS — flashed + verified OK      │
-└──────────────────────────────────────┘
-```
+![STM32 Flash Tool](screenshot.jpeg)
 
 ## Prerequisites
 
@@ -119,10 +103,12 @@ STM32_Programmer_CLI -c port=SWD sn=<SN> -w firmware.bin 0x08000000 -v -g
 
 ```
 stm32_flash_tool/
-├── stm32_flasher.py      ← The app (~310 lines, stdlib only)
+├── stm32_flasher.py      ← The app (~370 lines, stdlib only)
 ├── STM32flash_gui.py     ← Legacy version (reference)
 ├── build.bat             ← Build Windows .exe
 ├── build.sh              ← Build Linux binary
+├── icon.png / icon.ico   ← App icons
+├── screenshot.jpeg       ← Screenshot
 ├── README.md
 ├── LICENSE
 └── .gitignore

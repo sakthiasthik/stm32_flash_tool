@@ -560,6 +560,12 @@ class STM32Flasher(tk.Tk):
 
         def _worker():
             self._queue.put(("log", f">>> {' '.join(cmd)}\n"))
+            # The app is a windowed GUI, but the CLI is a console program —
+            # on Windows, spawning it without this flag flashes a black
+            # console window on every flash operation.
+            creationflags = 0
+            if platform.system() == "Windows":
+                creationflags = subprocess.CREATE_NO_WINDOW
             try:
                 proc = subprocess.Popen(
                     cmd,
@@ -567,6 +573,7 @@ class STM32Flasher(tk.Tk):
                     stderr=subprocess.STDOUT,
                     text=True,
                     bufsize=1,
+                    creationflags=creationflags,
                 )
             except FileNotFoundError:
                 elapsed = time.time() - self._flash_start

@@ -162,6 +162,8 @@ import json
 import re
 import queue
 import time
+import tempfile
+import atexit
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 3: APPLICATION CLASS
@@ -689,7 +691,73 @@ class STM32Flasher(tk.Tk):
 # SECTION 4: ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_instance_lock = None  # keep the OS handle alive for the whole process lifetime
+
+
+def _pid_alive(pid):
+    """True if a process with this PID exists (POSIX)."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, but not ours to signal
+
+
+def _acquire_single_instance():
+    """Ensure only one copy of the app runs. Exit if another is alive.
+
+    Fixes: clicking the .exe several times opened several windows.
+    """
+    global _instance_lock
+
+    if platform.system() == "Windows":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+        kernel32.CreateMutexW.restype = ctypes.c_void_p
+        _instance_lock = kernel32.CreateMutexW(None, False, "STM32FlashTool_SingleInstance")
+        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showwarning(
+                "Already Running",
+                "STM32 Flash Tool is already open.\n\n"
+                "Look for the green 'FLASH + VERIFY' window on your screen "
+                "or taskbar.")
+            root.destroy()
+            sys.exit(0)
+        return
+
+    # POSIX fallback: lock file holding our PID
+    lock_path = os.path.join(tempfile.gettempdir(), "stm32flasher.lock")
+    try:
+        with open(lock_path) as f:
+            pid = int(f.read().strip())
+        if _pid_alive(pid):
+            print("STM32 Flash Tool is already running (PID %d)." % pid)
+            sys.exit(0)
+    except (FileNotFoundError, ValueError):
+        pass  # no lock, or stale/corrupt lock — proceed
+
+    with open(lock_path, "w") as f:
+        f.write(str(os.getpid()))
+
+    def _cleanup():
+        try:
+            if os.path.isfile(lock_path):
+                with open(lock_path) as f:
+                    if f.read().strip() == str(os.getpid()):
+                        os.remove(lock_path)
+        except OSError:
+            pass
+
+    atexit.register(_cleanup)
+
+
 def main():
+    _acquire_single_instance()
     app = STM32Flasher(cli_path=_detected_cli_path)
     app.mainloop()
 

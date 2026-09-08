@@ -23,12 +23,12 @@ jobs:
         run: pip install pyinstaller
 
       - name: Build
-        run: bash build.sh
+        run: bash stm_flash_tool/build.sh
 
       - uses: actions/upload-artifact@v4
         with:
           name: STM32-Flasher-Linux
-          path: dist/STM32-Flasher
+          path: stm_flash_tool/dist/STM32-Flasher
 
   # ── Windows Build ────────────────────────────────────────────────────────
   build-windows:
@@ -45,12 +45,12 @@ jobs:
 
       - name: Build
         shell: cmd
-        run: build.bat
+        run: stm_flash_tool\build.bat
 
       - uses: actions/upload-artifact@v4
         with:
           name: STM32-Flasher-Windows
-          path: dist/STM32-Flasher.exe
+          path: stm_flash_tool\dist\STM32-Flasher.exe
 
   # ── GitHub Release (only on version tags like v0.1.0) ────────────────────
   release:

@@ -8,6 +8,13 @@ Lightweight, cross-platform GUI tool for flashing STM32 microcontrollers in mass
 ![Python](https://img.shields.io/badge/python-3.7%2B-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 
+## Tools in this repo
+
+| Folder | Tool | Status |
+|--------|------|--------|
+| `stm_flash_tool/` | **STM32 Flash Tool** — production ST-LINK flasher (pick serial number) | Stable |
+| `simple_flash_tool/` | **Simple Flash Tool** — J-Flash Lite style, J-Link + ST-LINK, any MCU, board-name database | In development |
+
 ## Features
 
 - ⚡ **Flash + Verify** — one click writes firmware, verifies it, and starts execution
@@ -20,7 +27,7 @@ Lightweight, cross-platform GUI tool for flashing STM32 microcontrollers in mass
 
 ## Screenshot
 
-![STM32 Flash Tool](screenshot.jpeg)
+![STM32 Flash Tool](stm_flash_tool/screenshot.jpeg)
 
 ## Prerequisites
 
@@ -59,7 +66,7 @@ chmod +x STM32-Flasher    # ⚠️ Required after download from web
 ### Option B: Run the Python file directly
 
 ```bash
-python3 stm32_flasher.py
+python3 stm_flash_tool/stm32_flasher.py
 ```
 Requires Python 3.7+. On Linux, the app auto-installs `python3-tk` if missing.
 
@@ -68,16 +75,16 @@ Requires Python 3.7+. On Linux, the app auto-installs `python3-tk` if missing.
 **Windows:**
 ```cmd
 pip install pyinstaller
-build.bat
+stm_flash_tool\build.bat
 ```
-Output: `dist\STM32-Flasher.exe`
+Output: `stm_flash_tool\dist\STM32-Flasher.exe`
 
 **Linux:**
 ```bash
 pip install pyinstaller
-bash build.sh
+bash stm_flash_tool/build.sh
 ```
-Output: `dist/STM32-Flasher`
+Output: `stm_flash_tool/dist/STM32-Flasher`
 
 ## How It Works
 
@@ -103,13 +110,17 @@ STM32_Programmer_CLI -c port=SWD sn=<SN> -w firmware.bin 0x08000000 -v -g
 
 ```
 stm32_flash_tool/
-├── stm32_flasher.py      ← The app (~370 lines, stdlib only)
-├── STM32flash_gui.py     ← Legacy version (reference)
-├── build.bat             ← Build Windows .exe
-├── build.sh              ← Build Linux binary
-├── icon.png / icon.ico   ← App icons
-├── screenshot.jpeg       ← Screenshot
+├── stm_flash_tool/           ← STM32 Flash Tool (stable)
+│   ├── stm32_flasher.py      ←   The app (~370 lines, stdlib only)
+│   ├── STM32flash_gui.py     ←   Legacy version (reference)
+│   ├── build.bat             ←   Build Windows .exe
+│   ├── build.sh              ←   Build Linux binary
+│   ├── icon.png / icon.ico   ←   App icons
+│   └── screenshot.jpeg
+├── simple_flash_tool/        ← Simple Flash Tool (in development, see its README)
+├── .github/workflows/        ← CI builds both tools
 ├── README.md
+├── BUGS.md
 ├── LICENSE
 └── .gitignore
 ```

@@ -1,6 +1,8 @@
 @echo off
 REM Build standalone Windows .exe
 REM Requires: pip install pyinstaller
+REM Run from anywhere — output lands in stm_flash_tool\dist\
+cd /d "%~dp0"
 
 echo === STM32 Flash Tool — Windows Build ===
 

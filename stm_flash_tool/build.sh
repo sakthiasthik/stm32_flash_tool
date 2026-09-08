@@ -1,8 +1,10 @@
 #!/bin/bash
 # Build standalone Linux executable
 # Requires: pip install pyinstaller
+# Run from anywhere — output lands in stm_flash_tool/dist/
 
 set -e
+cd "$(dirname "$0")"
 
 echo "=== STM32 Flash Tool — Linux Build ==="
 

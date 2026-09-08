@@ -2,6 +2,12 @@
 
 Report date: 2026-09-07 · Applies to: `v1.0.0` (`stm32_flasher.py`)
 
+**Fixed on `dev` branch (2026-09-08):**
+- ✅ Bug #1 — single-instance guard (mutex on Windows, PID lockfile on Linux) — tested
+- ✅ Bug #2 — flash timeout now works when the CLI hangs
+- ✅ Bug #3 — address field stays disabled for ELF/HEX after operations
+- ✅ Bug #6 — no more flashing black console window on Windows
+
 ---
 
 ## ⭐ BUG #1 — CRITICAL — App opens MULTIPLE windows on Windows

@@ -128,6 +128,11 @@ Settings are auto-saved to `~/.stm32flasher.json`:
 
 No settings UI — it just works.
 
+## Known Bugs
+
+See **[BUGS.md](BUGS.md)** — includes the multi-window issue on Windows and the
+roadmap for J-Link support and the board-name database.
+
 ## License
 
 MIT — see [LICENSE](LICENSE)

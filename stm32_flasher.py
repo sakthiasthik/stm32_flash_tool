@@ -162,6 +162,8 @@ import json
 import re
 import queue
 import time
+import tempfile
+import atexit
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 3: APPLICATION CLASS
@@ -386,7 +388,12 @@ class STM32Flasher(tk.Tk):
         self._btn_verify.configure(state=state)
         self._btn_refresh.configure(state=state)
         self._btn_browse.configure(state=state)
-        self._addr_entry.configure(state=state)
+        if busy:
+            self._addr_entry.configure(state="disabled")
+        else:
+            # Re-apply the BIN-only rule instead of blindly enabling the field,
+            # which left it editable for ELF/HEX after every operation.
+            self._on_file_changed()
 
     # ── Actions ───────────────────────────────────────────────────────────
 
@@ -553,6 +560,12 @@ class STM32Flasher(tk.Tk):
 
         def _worker():
             self._queue.put(("log", f">>> {' '.join(cmd)}\n"))
+            # The app is a windowed GUI, but the CLI is a console program —
+            # on Windows, spawning it without this flag flashes a black
+            # console window on every flash operation.
+            creationflags = 0
+            if platform.system() == "Windows":
+                creationflags = subprocess.CREATE_NO_WINDOW
             try:
                 proc = subprocess.Popen(
                     cmd,
@@ -560,17 +573,38 @@ class STM32Flasher(tk.Tk):
                     stderr=subprocess.STDOUT,
                     text=True,
                     bufsize=1,
+                    creationflags=creationflags,
                 )
-                for line in proc.stdout:
-                    self._queue.put(("log", line))
-                proc.wait(timeout=self.TIMEOUT_SECONDS)
-
+            except FileNotFoundError:
                 elapsed = time.time() - self._flash_start
-                if proc.returncode == 0:
-                    self._queue.put(("done", mode, proc.returncode, "", elapsed))
+                self._queue.put(("done", mode, -1,
+                                 f"CLI not found: {self.cli_path.get()}", elapsed))
+                return
+            except OSError as e:
+                elapsed = time.time() - self._flash_start
+                self._queue.put(("done", mode, -1, str(e), elapsed))
+                return
+
+            # Read output on a helper thread. A hung CLI keeps stdout open
+            # forever; if we read inline, the for-loop never reaches EOF and
+            # the timeout below never runs — the UI stays "busy" permanently.
+            def _reader():
+                try:
+                    for line in proc.stdout:
+                        self._queue.put(("log", line))
+                except Exception:
+                    pass  # pipe closed / process killed
+
+            threading.Thread(target=_reader, daemon=True).start()
+
+            try:
+                rc = proc.wait(timeout=self.TIMEOUT_SECONDS)
+                elapsed = time.time() - self._flash_start
+                if rc == 0:
+                    self._queue.put(("done", mode, rc, "", elapsed))
                 else:
-                    self._queue.put(("done", mode, proc.returncode,
-                                     f"CLI exited with code {proc.returncode}", elapsed))
+                    self._queue.put(("done", mode, rc,
+                                     f"CLI exited with code {rc}", elapsed))
             except subprocess.TimeoutExpired:
                 try:
                     proc.kill()
@@ -578,13 +612,6 @@ class STM32Flasher(tk.Tk):
                     pass
                 elapsed = time.time() - self._flash_start
                 self._queue.put(("done", mode, -1, "Operation timed out.", elapsed))
-            except FileNotFoundError:
-                elapsed = time.time() - self._flash_start
-                self._queue.put(("done", mode, -1,
-                                 f"CLI not found: {self.cli_path.get()}", elapsed))
-            except Exception as e:
-                elapsed = time.time() - self._flash_start
-                self._queue.put(("done", mode, -1, str(e), elapsed))
 
         self._worker_thread = threading.Thread(target=_worker, daemon=True)
         self._worker_thread.start()
@@ -689,7 +716,73 @@ class STM32Flasher(tk.Tk):
 # SECTION 4: ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_instance_lock = None  # keep the OS handle alive for the whole process lifetime
+
+
+def _pid_alive(pid):
+    """True if a process with this PID exists (POSIX)."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, but not ours to signal
+
+
+def _acquire_single_instance():
+    """Ensure only one copy of the app runs. Exit if another is alive.
+
+    Fixes: clicking the .exe several times opened several windows.
+    """
+    global _instance_lock
+
+    if platform.system() == "Windows":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+        kernel32.CreateMutexW.restype = ctypes.c_void_p
+        _instance_lock = kernel32.CreateMutexW(None, False, "STM32FlashTool_SingleInstance")
+        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showwarning(
+                "Already Running",
+                "STM32 Flash Tool is already open.\n\n"
+                "Look for the green 'FLASH + VERIFY' window on your screen "
+                "or taskbar.")
+            root.destroy()
+            sys.exit(0)
+        return
+
+    # POSIX fallback: lock file holding our PID
+    lock_path = os.path.join(tempfile.gettempdir(), "stm32flasher.lock")
+    try:
+        with open(lock_path) as f:
+            pid = int(f.read().strip())
+        if _pid_alive(pid):
+            print("STM32 Flash Tool is already running (PID %d)." % pid)
+            sys.exit(0)
+    except (FileNotFoundError, ValueError):
+        pass  # no lock, or stale/corrupt lock — proceed
+
+    with open(lock_path, "w") as f:
+        f.write(str(os.getpid()))
+
+    def _cleanup():
+        try:
+            if os.path.isfile(lock_path):
+                with open(lock_path) as f:
+                    if f.read().strip() == str(os.getpid()):
+                        os.remove(lock_path)
+        except OSError:
+            pass
+
+    atexit.register(_cleanup)
+
+
 def main():
+    _acquire_single_instance()
     app = STM32Flasher(cli_path=_detected_cli_path)
     app.mainloop()
 

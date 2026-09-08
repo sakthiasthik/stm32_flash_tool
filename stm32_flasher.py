@@ -388,7 +388,12 @@ class STM32Flasher(tk.Tk):
         self._btn_verify.configure(state=state)
         self._btn_refresh.configure(state=state)
         self._btn_browse.configure(state=state)
-        self._addr_entry.configure(state=state)
+        if busy:
+            self._addr_entry.configure(state="disabled")
+        else:
+            # Re-apply the BIN-only rule instead of blindly enabling the field,
+            # which left it editable for ELF/HEX after every operation.
+            self._on_file_changed()
 
     # ── Actions ───────────────────────────────────────────────────────────
 

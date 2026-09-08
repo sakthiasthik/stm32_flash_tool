@@ -563,16 +563,36 @@ class STM32Flasher(tk.Tk):
                     text=True,
                     bufsize=1,
                 )
-                for line in proc.stdout:
-                    self._queue.put(("log", line))
-                proc.wait(timeout=self.TIMEOUT_SECONDS)
-
+            except FileNotFoundError:
                 elapsed = time.time() - self._flash_start
-                if proc.returncode == 0:
-                    self._queue.put(("done", mode, proc.returncode, "", elapsed))
+                self._queue.put(("done", mode, -1,
+                                 f"CLI not found: {self.cli_path.get()}", elapsed))
+                return
+            except OSError as e:
+                elapsed = time.time() - self._flash_start
+                self._queue.put(("done", mode, -1, str(e), elapsed))
+                return
+
+            # Read output on a helper thread. A hung CLI keeps stdout open
+            # forever; if we read inline, the for-loop never reaches EOF and
+            # the timeout below never runs — the UI stays "busy" permanently.
+            def _reader():
+                try:
+                    for line in proc.stdout:
+                        self._queue.put(("log", line))
+                except Exception:
+                    pass  # pipe closed / process killed
+
+            threading.Thread(target=_reader, daemon=True).start()
+
+            try:
+                rc = proc.wait(timeout=self.TIMEOUT_SECONDS)
+                elapsed = time.time() - self._flash_start
+                if rc == 0:
+                    self._queue.put(("done", mode, rc, "", elapsed))
                 else:
-                    self._queue.put(("done", mode, proc.returncode,
-                                     f"CLI exited with code {proc.returncode}", elapsed))
+                    self._queue.put(("done", mode, rc,
+                                     f"CLI exited with code {rc}", elapsed))
             except subprocess.TimeoutExpired:
                 try:
                     proc.kill()
@@ -580,13 +600,6 @@ class STM32Flasher(tk.Tk):
                     pass
                 elapsed = time.time() - self._flash_start
                 self._queue.put(("done", mode, -1, "Operation timed out.", elapsed))
-            except FileNotFoundError:
-                elapsed = time.time() - self._flash_start
-                self._queue.put(("done", mode, -1,
-                                 f"CLI not found: {self.cli_path.get()}", elapsed))
-            except Exception as e:
-                elapsed = time.time() - self._flash_start
-                self._queue.put(("done", mode, -1, str(e), elapsed))
 
         self._worker_thread = threading.Thread(target=_worker, daemon=True)
         self._worker_thread.start()
